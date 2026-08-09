@@ -17,6 +17,7 @@ model Company {
 	city       String?
 	postalCode String?
 	country    String     @default("Italia")
+	logoData   String?
 	users      User[]
 	sessions   Session[]
 	customers  Customer[]

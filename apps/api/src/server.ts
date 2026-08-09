@@ -9,7 +9,7 @@ import { findSaaSPlan, SAAS_PLANS } from "@ai-office/billing";
 import { authenticate, createSession, hashPassword, tokenHash, verifyPassword } from "./auth.js";
 import { generateQuotePdf, sendQuoteEmail } from "./quote-service.js";
 import { decryptMailboxPassword, encryptMailboxPassword, sendMailboxEmail, verifyMailbox } from "./mailbox-service.js";
-import { createPayPalSubscription, getPayPalSubscription, paypalApprovalUrl, verifyPayPalWebhook, type PayPalWebhookEvent } from "./paypal-service.js";
+import { createPayPalSubscription, getPayPalSubscription, paypalApprovalUrl, paypalConfigured, verifyPayPalWebhook, type PayPalWebhookEvent } from "./paypal-service.js";
 import { automateQuoteRequest } from "./email-quote-automation.js";
 import { apiDocsHtml, openApiDocument } from "./openapi.js";
 
@@ -41,6 +41,13 @@ function emailValue(value: unknown, field: string) {
   const email = stringValue(value, field).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw Object.assign(new Error(`Email non valida: ${field}`), { statusCode: 400 });
   return email;
+}
+
+function logoDataValue(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) throw Object.assign(new Error("Logo aziendale non valido"), { statusCode: 400 });
+  if (Buffer.byteLength(value, "utf8") > 750_000) throw Object.assign(new Error("Il logo aziendale supera 500 KB"), { statusCode: 413 });
+  return value;
 }
 
 function publicCustomer(customer: { id: string; name: string; companyName: string; email: string; phone: string | null; status: string; satisfaction: number; lastContact: Date }) {
@@ -182,7 +189,8 @@ async function buildServer() {
         phone: typeof request.body.phone === "string" ? request.body.phone.trim() || null : null,
         address: typeof request.body.address === "string" ? request.body.address.trim() || null : null,
         city: typeof request.body.city === "string" ? request.body.city.trim() || null : null,
-        postalCode: typeof request.body.postalCode === "string" ? request.body.postalCode.trim() || null : null
+        postalCode: typeof request.body.postalCode === "string" ? request.body.postalCode.trim() || null : null,
+        logoData: logoDataValue(request.body.companyLogo)
       } });
       const user = await transaction.user.create({ data: { companyId: company.id, name, email, passwordHash } });
       await transaction.onboarding.create({ data: { companyId: company.id, modules: defaultModules } });
@@ -212,6 +220,16 @@ async function buildServer() {
     const auth = await authenticate(request);
     const company = await database.company.findUniqueOrThrow({ where: { id: auth.companyId } });
     return { user: auth, company };
+  });
+
+  app.patch<{ Body: Record<string, unknown> }>("/api/company", async (request) => {
+    const auth = await authenticate(request);
+    const company = await database.company.update({ where: { id: auth.companyId }, data: {
+      name: typeof request.body.name === "string" && request.body.name.trim() ? request.body.name.trim() : undefined,
+      logoData: request.body.logoData !== undefined ? logoDataValue(request.body.logoData) : undefined
+    } });
+    publish(auth.companyId, "company.updated", { id: company.id });
+    return company;
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -406,7 +424,7 @@ async function buildServer() {
     const auth = await authenticate(request);
     await database.$queryRaw`SELECT 1`;
     const mailbox = await database.mailbox.findFirst({ where: { companyId: auth.companyId, enabled: true }, orderBy: { isPrimary: "desc" } });
-    return { api: { status: "online", websocketClients: sockets.size }, email: { status: mailbox ? "configurato" : "non-configurato", host: mailbox?.imapHost ?? null, listener: "worker" }, ai: { status: "online", mode: "operativo", externalProvider: false }, database: { status: "online", mode: "postgresql" } };
+    return { api: { status: "online", websocketClients: sockets.size }, email: { status: mailbox ? "configurato" : "non-configurato", host: mailbox?.imapHost ?? null, listener: "worker" }, ai: { status: "online", mode: "operativo", externalProvider: false }, database: { status: "online", mode: "postgresql" }, billing: { status: paypalConfigured() ? "configurato" : "non-configurato", provider: "paypal", environment: process.env.PAYPAL_ENVIRONMENT === "live" ? "live" : "sandbox" } };
   });
 
   const websocketRoute = app.get.bind(app) as unknown as (path: string, options: { websocket: true }, handler: (socket: LiveSocket, request: FastifyRequest) => void) => void;
