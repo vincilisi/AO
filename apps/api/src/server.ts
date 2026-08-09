@@ -110,15 +110,6 @@ async function buildServer() {
   await app.register(cors, { origin: true, methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"] });
   await app.register(websocket);
 
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_IMAP_HOST && process.env.EMAIL_SMTP_HOST) {
-    const existingMailbox = await database.mailbox.findFirst({ where: { email: { equals: process.env.EMAIL_USER, mode: "insensitive" } } });
-    if (!existingMailbox) {
-      const matchingCompany = await database.company.findFirst({ where: { email: { equals: process.env.EMAIL_USER, mode: "insensitive" } } });
-      const company = matchingCompany ?? await database.company.findFirst({ orderBy: { createdAt: "asc" } });
-      if (company) await database.mailbox.create({ data: { companyId: company.id, email: process.env.EMAIL_USER.toLowerCase(), username: process.env.EMAIL_USER, passwordEncrypted: encryptMailboxPassword(process.env.EMAIL_PASS), imapHost: process.env.EMAIL_IMAP_HOST, imapPort: Number(process.env.EMAIL_IMAP_PORT ?? 993), smtpHost: process.env.EMAIL_SMTP_HOST, smtpPort: Number(process.env.EMAIL_SMTP_PORT ?? 465), displayName: company.name, isPrimary: true } });
-    }
-  }
-
   app.setErrorHandler((error, _request, reply) => {
     let message = error instanceof Error ? error.message : "Errore interno";
     let statusCode = typeof error === "object" && error !== null && "statusCode" in error ? Number(error.statusCode) : 500;

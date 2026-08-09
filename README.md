@@ -29,6 +29,8 @@ docker compose -f infra/docker/docker-compose.yml up -d
 
 Al primo accesso registrare l'utente e l'azienda. La sessione, i clienti, le email, le attività, il personale e i preventivi sono persistiti in PostgreSQL e isolati per azienda.
 
+Ogni azienda collega una o più caselle da **Email engine → Aggiungi casella**. Le credenziali sono cifrate nel database e il worker carica automaticamente tutte le caselle abilitate: non esiste una casella email globale condivisa tramite `.env`.
+
 ## Come verificare che funziona
 
 1. Avvia API e dashboard con `npm run dev`, poi apri `http://localhost:3000` e registra azienda e amministratore.
