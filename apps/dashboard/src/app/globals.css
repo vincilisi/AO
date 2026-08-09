@@ -205,10 +205,10 @@ body { font-family: Aptos, "Segoe UI Variable", sans-serif; }
 .install-app-button:hover { background: #155f46; }
 @media (max-width: 640px) { .install-app-button { right: 12px; bottom: max(12px,env(safe-area-inset-bottom)); width: 42px; padding: 0; justify-content: center; }.install-app-button span { display: none; } }
 
-.global-legal-links { position: fixed; left: 18px; bottom: 14px; z-index: 80; display: flex; gap: 13px; }
+.global-legal-links { position: fixed; left: 18px; bottom: 14px; z-index: 80; display: none; gap: 13px; }
+body:has(.auth-shell) .global-legal-links { display: flex; }
 .global-legal-links a { color: #718079; font-size: 10px; font-weight: 700; }
 .legal-page { min-height: 100vh; color: var(--ink); background: #f3f6f4; }
-.legal-page + .global-legal-links { display: none; }
 .legal-header { min-height: 74px; padding: 16px clamp(20px,5vw,72px); display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: #102f25; }
 .legal-brand { display: flex; align-items: center; gap: 11px; color: white; text-decoration: none; font-weight: 750; }
 .legal-brand span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; color: #102f25; background: var(--gold); font: 700 12px Georgia,serif; }
