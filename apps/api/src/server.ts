@@ -820,11 +820,15 @@ async function buildServer() {
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
 const host = process.env.API_HOST ?? (process.env.VERCEL ? "0.0.0.0" : "127.0.0.1");
-const app = await buildServer();
 
-try {
-  await app.listen({ port, host });
-} catch (error) {
-  app.log.error(error);
-  process.exit(1);
+async function start() {
+  const app = await buildServer();
+  try {
+    await app.listen({ port, host });
+  } catch (error) {
+    app.log.error(error);
+    process.exit(1);
+  }
 }
+
+void start();
