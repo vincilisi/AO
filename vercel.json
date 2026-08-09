@@ -9,7 +9,7 @@
       "root": ".",
       "framework": "fastify",
       "entrypoint": "apps/api/src/server.ts",
-      "installCommand": "npm install && npx prisma generate --schema packages/prisma/schema.prisma"
+      "installCommand": "npm install && npx prisma generate --schema ../../packages/prisma/schema.prisma"
     }
   },
   "rewrites": [
