@@ -44,6 +44,8 @@ Al primo accesso registrare l'utente e l'azienda. L'onboarding configura moduli,
 
 Ogni azienda collega una o più caselle da **Email engine → Aggiungi casella**. Le credenziali sono cifrate nel database e il worker carica automaticamente tutte le caselle abilitate: non esiste una casella email globale condivisa tramite `.env`.
 
+In produzione la rotta protetta `GET /api/internal/email/poll` esegue un polling IMAP stateless: importa fino a 50 messaggi non letti per casella, usa la pipeline email esistente e segna il messaggio come letto solo dopo il salvataggio. Vercel richiede `CRON_SECRET`, `INTERNAL_API_KEY`, `MAILBOX_ENCRYPTION_KEY` e `APP_URL`. Il piano Hobby esegue il cron una volta al giorno; per una sincronizzazione ogni minuto serve Vercel Pro oppure uno scheduler esterno che invii `Authorization: Bearer <CRON_SECRET>`.
+
 ## Come verificare che funziona
 
 1. Avvia API e dashboard con `npm run dev`, poi apri `http://localhost:3000` e registra azienda e amministratore.

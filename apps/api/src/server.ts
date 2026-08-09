@@ -11,6 +11,7 @@ import { generateQuotePdf, sendQuoteEmail } from "./quote-service.js";
 import { decryptMailboxPassword, encryptMailboxPassword, sendMailboxEmail, verifyMailbox } from "./mailbox-service.js";
 import { createPayPalSubscription, getPayPalSubscription, paypalApprovalUrl, paypalConfigured, verifyPayPalWebhook, type PayPalWebhookEvent } from "./paypal-service.js";
 import { automateQuoteRequest } from "./email-quote-automation.js";
+import { pollEnabledMailboxes } from "./email-poll-service.js";
 import { apiDocsHtml, openApiDocument } from "./openapi.js";
 
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
@@ -419,6 +420,12 @@ async function buildServer() {
     if (!["127.0.0.1", "::1"].includes(request.ip)) throw Object.assign(new Error("Endpoint disponibile solo localmente"), { statusCode: 403 });
     const mailboxes = await database.mailbox.findMany({ where: { enabled: true } });
     return mailboxes.map((mailbox) => ({ ...publicMailbox(mailbox), companyId: mailbox.companyId, password: decryptMailboxPassword(mailbox.passwordEncrypted) }));
+  });
+
+  app.get("/api/internal/email/poll", async (request) => {
+    const expected = process.env.CRON_SECRET;
+    if (!expected || request.headers.authorization !== `Bearer ${expected}`) throw Object.assign(new Error("Autorizzazione cron non valida"), { statusCode: 401 });
+    return pollEnabledMailboxes();
   });
 
   app.get("/api/system/status", async (request) => {

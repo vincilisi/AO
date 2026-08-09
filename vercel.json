@@ -38,5 +38,11 @@
         "service": "dashboard"
       }
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/internal/email/poll",
+      "schedule": "0 6 * * *"
+    }
   ]
 }
