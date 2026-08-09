@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyRequest } from "fastify";
-import cors from "@fastify/cors";
+import cors, { type FastifyCorsOptions } from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { Prisma, database } from "@ai-office/database";
 import { analyzeEmail } from "@ai-office/ai-core";
@@ -141,7 +141,8 @@ function publicEmail(email: { id: string; messageId: string; from: string; to: s
 
 async function buildServer() {
   const app = Fastify({ logger: true, bodyLimit: 2_000_000 });
-  await app.register(cors, { origin: true, methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"] });
+  const corsOptions: FastifyCorsOptions = { origin: true, methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"] };
+  await app.register(cors, corsOptions);
   await app.register(websocket);
 
   app.setErrorHandler((error, _request, reply) => {
