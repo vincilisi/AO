@@ -31,6 +31,10 @@ export function decryptMailboxPassword(value: string) {
   return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64url")), decipher.final()]).toString("utf8");
 }
 
+export function normalizeMailboxPassword(password: string, hosts: string[]) {
+  return hosts.some((host) => host.toLowerCase().endsWith("gmail.com")) ? password.replace(/\s/g, "") : password;
+}
+
 function transportFor(mailbox: MailboxConnection) {
   return nodemailer.createTransport({
     host: mailbox.smtpHost,
@@ -41,7 +45,16 @@ function transportFor(mailbox: MailboxConnection) {
 }
 
 export async function verifyMailbox(mailbox: MailboxConnection) {
-  await transportFor(mailbox).verify();
+  try {
+    await transportFor(mailbox).verify();
+  } catch (error) {
+    const authenticationError = typeof error === "object" && error !== null &&
+      (("code" in error && error.code === "EAUTH") || ("responseCode" in error && error.responseCode === 535));
+    if (authenticationError) {
+      throw Object.assign(new Error("Gmail ha rifiutato l'accesso. Usa l'indirizzo Gmail completo e una password per app di 16 caratteri, non la password normale dell'account."), { statusCode: 400 });
+    }
+    throw error;
+  }
 }
 
 export async function sendMailboxEmail(mailbox: MailboxConnection, message: { to: string; subject: string; text: string; inReplyTo?: string; attachments?: Array<{ filename: string; content: Buffer; contentType: string }> }) {

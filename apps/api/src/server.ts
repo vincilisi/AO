@@ -8,7 +8,7 @@ import { analyzeEmail } from "@ai-office/ai-core";
 import { findSaaSPlan, SAAS_PLANS } from "@ai-office/billing";
 import { authenticate, createSession, hashPassword, tokenHash, verifyPassword } from "./auth.js";
 import { generateQuotePdf, sendQuoteEmail } from "./quote-service.js";
-import { decryptMailboxPassword, encryptMailboxPassword, sendMailboxEmail, verifyMailbox } from "./mailbox-service.js";
+import { decryptMailboxPassword, encryptMailboxPassword, normalizeMailboxPassword, sendMailboxEmail, verifyMailbox } from "./mailbox-service.js";
 import { createPayPalSubscription, getPayPalSubscription, paypalApprovalUrl, paypalConfigured, verifyPayPalWebhook, type PayPalWebhookEvent } from "./paypal-service.js";
 import { automateQuoteRequest } from "./email-quote-automation.js";
 import { pollEnabledMailboxes } from "./email-poll-service.js";
@@ -351,14 +351,16 @@ async function buildServer() {
     const email = emailValue(request.body.email, "email");
     const password = stringValue(request.body.password, "password");
     const existingCount = await database.mailbox.count({ where: { companyId: auth.companyId } });
+    const imapHost = stringValue(request.body.imapHost, "imapHost");
+    const smtpHost = stringValue(request.body.smtpHost, "smtpHost");
     const input = {
       email,
       displayName: typeof request.body.displayName === "string" ? request.body.displayName.trim() || null : null,
       username: typeof request.body.username === "string" && request.body.username.trim() ? request.body.username.trim() : email,
-      passwordEncrypted: encryptMailboxPassword(password),
-      imapHost: stringValue(request.body.imapHost, "imapHost"),
+      passwordEncrypted: encryptMailboxPassword(normalizeMailboxPassword(password, [imapHost, smtpHost])),
+      imapHost,
       imapPort: Number(request.body.imapPort ?? 993),
-      smtpHost: stringValue(request.body.smtpHost, "smtpHost"),
+      smtpHost,
       smtpPort: Number(request.body.smtpPort ?? 465)
     };
     if (!Number.isInteger(input.imapPort) || !Number.isInteger(input.smtpPort)) throw Object.assign(new Error("Porte email non valide"), { statusCode: 400 });
