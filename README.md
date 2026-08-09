@@ -2,6 +2,12 @@
 
 > Applicazione multi-tenant con dashboard Next.js, API Fastify, PostgreSQL, autenticazione, CRM, preventivi PDF, Email Engine IMAP/SMTP, AI e automazioni.
 
+## Stato prodotto
+
+- [x] **Dashboard Next.js** moderna e responsive
+- [x] **Sistema di login / registrazione** multi-tenant
+- [x] **Onboarding email automatico** con configurazione AI, moduli e connessione IMAP/SMTP guidata
+
 ## Avvio rapido
 
 Prerequisiti: Node.js 20+, npm e PostgreSQL 16+ (oppure Docker). Dalla radice del repository:

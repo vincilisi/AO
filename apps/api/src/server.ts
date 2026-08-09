@@ -350,7 +350,7 @@ async function buildServer() {
     });
     await database.company.update({ where: { id: auth.companyId }, data: { email: mailbox.isPrimary ? mailbox.email : undefined } });
     await ensureCommercialSetup(auth.companyId);
-    await database.onboarding.update({ where: { companyId: auth.companyId }, data: { currentStep: 2 } });
+    await database.onboarding.updateMany({ where: { companyId: auth.companyId, currentStep: { lt: 2 } }, data: { currentStep: 2 } });
     publish(auth.companyId, "mailbox.created", { id: mailbox.id });
     return reply.status(201).send(publicMailbox(mailbox));
   });
