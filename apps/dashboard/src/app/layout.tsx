@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { PwaRegister } from "../components/pwa-register";
 import "./globals.css";
 
@@ -28,7 +29,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="it">
-      <body>{children}<PwaRegister /></body>
+      <body>{children}<nav className="global-legal-links" aria-label="Informazioni legali"><Link href="/privacy">Privacy</Link><Link href="/termini">Termini</Link><Link href="/cookie">Cookie</Link></nav><PwaRegister /></body>
     </html>
   );
 }

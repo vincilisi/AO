@@ -204,3 +204,23 @@ body { font-family: Aptos, "Segoe UI Variable", sans-serif; }
 .install-app-button { position: fixed; right: 18px; bottom: 18px; z-index: 90; min-height: 42px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border: 1px solid #496f62; border-radius: 7px; color: white; background: #102f25; box-shadow: 0 12px 32px #071b1455; font-weight: 750; }
 .install-app-button:hover { background: #155f46; }
 @media (max-width: 640px) { .install-app-button { right: 12px; bottom: max(12px,env(safe-area-inset-bottom)); width: 42px; padding: 0; justify-content: center; }.install-app-button span { display: none; } }
+
+.global-legal-links { position: fixed; left: 18px; bottom: 14px; z-index: 80; display: flex; gap: 13px; }
+.global-legal-links a { color: #718079; font-size: 10px; font-weight: 700; }
+.legal-page { min-height: 100vh; color: var(--ink); background: #f3f6f4; }
+.legal-page + .global-legal-links { display: none; }
+.legal-header { min-height: 74px; padding: 16px clamp(20px,5vw,72px); display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: #102f25; }
+.legal-brand { display: flex; align-items: center; gap: 11px; color: white; text-decoration: none; font-weight: 750; }
+.legal-brand span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; color: #102f25; background: var(--gold); font: 700 12px Georgia,serif; }
+.legal-back { color: #d3e1dc; font-size: 12px; font-weight: 700; text-decoration: none; }
+.legal-content { width: min(880px,calc(100% - 32px)); margin: 0 auto; padding: 64px 0 76px; }
+.legal-content > h1 { margin: 8px 0 18px; font: 750 44px/1.05 Aptos Display,"Segoe UI Variable Display",sans-serif; }
+.legal-intro { max-width: 720px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.65; }
+.legal-updated { margin: 20px 0 46px; color: #7c8781; font-size: 11px; }
+.legal-content section { padding: 27px 0; border-top: 1px solid var(--line); }
+.legal-content h2 { margin: 0 0 12px; font: 750 20px Aptos Display,"Segoe UI Variable Display",sans-serif; }
+.legal-content section p { margin: 0; color: #53605a; font-size: 14px; line-height: 1.75; }
+.legal-content a { color: var(--forest); font-weight: 700; }
+.legal-footer { min-height: 80px; padding: 24px; display: flex; justify-content: center; gap: 24px; border-top: 1px solid var(--line); background: white; }
+.legal-footer a { color: var(--forest); font-size: 12px; font-weight: 700; }
+@media (max-width: 640px) { .global-legal-links { left: 12px; bottom: 8px; }.legal-content { padding-top: 42px; }.legal-content > h1 { font-size: 34px; }.legal-header { padding-inline: 18px; }.legal-footer { gap: 16px; } }
