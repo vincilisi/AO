@@ -15,6 +15,8 @@ npm run dev
 
 Aprire `http://localhost:3000`. L'API risponde su `http://127.0.0.1:4000`.
 
+La documentazione REST interattiva è disponibile su `http://127.0.0.1:4000/api/docs`; la specifica OpenAPI JSON è esposta da `http://127.0.0.1:4000/api/openapi.json`.
+
 Per avviare il listener email in un terminale separato:
 
 ```powershell
@@ -27,7 +29,7 @@ Creare `.env` partendo da `.env.example`. Per avviare PostgreSQL con Docker:
 docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
-Al primo accesso registrare l'utente e l'azienda. La sessione, i clienti, le email, le attività, il personale e i preventivi sono persistiti in PostgreSQL e isolati per azienda.
+Al primo accesso registrare l'utente e l'azienda. L'onboarding configura moduli, tono, firma e istruzioni AI e guida al collegamento della prima casella. Sessioni, clienti, timeline CRM, email, attività, personale, presenze, report, preventivi, revisioni, ordini, ticket e automazioni sono persistiti in PostgreSQL e isolati per azienda.
 
 Ogni azienda collega una o più caselle da **Email engine → Aggiungi casella**. Le credenziali sono cifrate nel database e il worker carica automaticamente tutte le caselle abilitate: non esiste una casella email globale condivisa tramite `.env`.
 
@@ -50,7 +52,7 @@ L'API crea prodotto, piano e abbonamento PayPal con installazione una tantum, 14
 
 ### Stato delle integrazioni
 
-- **Reale e attivo:** registrazione, login e sessioni; isolamento per azienda; PostgreSQL; CRM; attività; personale; preventivi con PDF persistito; invio SMTP al cliente con copia all'azienda; IMAP Gmail; API HTTP e WebSocket.
+- **Reale e attivo:** registrazione, login, onboarding e sessioni; isolamento per azienda; PostgreSQL; CRM con timeline e preferenze; HR con presenze e report; preventivi con sconti, revisioni, follow-up, PDF e conversione in ordine; invio SMTP; IMAP; automazioni configurabili; API HTTP, OpenAPI e WebSocket.
 - **SaaS:** catalogo piani server-side, prova di 14 giorni, approvazione PayPal, costo di installazione, webhook verificato e stato persistito in PostgreSQL.
 - **Automatico:** una richiesta di preventivo ricevuta via email crea o aggiorna il cliente, riconosce voci e quantità, genera e invia il PDF dalla casella principale. Se un dato è assente o ambiguo, chiede un chiarimento senza inventare prezzi.
 - **Non configurato:** provider AI esterno, WhatsApp, ERP e payroll. L'AI attuale usa regole locali deterministiche.
@@ -59,7 +61,8 @@ L'API crea prodotto, piano e abbonamento PayPal con installazione una tantum, 14
 
 | Segmento | Piano | Canone | Installazione |
 | --- | --- | ---: | ---: |
-| Privato e professionista | Essenziale | 49 €/mese | 190 € |
+| Professionista | Base | 49 €/mese | 190 € |
+| Team in crescita | Pro | 99 €/mese | 490 € |
 | Piccola azienda | Business | 199 €/mese | 990 € |
 | Grande azienda | Enterprise | 749 €/mese | 4.900 € |
 

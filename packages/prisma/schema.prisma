@@ -26,7 +26,13 @@ model Company {
 	quotes     Quote[]
 	products   Product[]
 	subscription Subscription?
+	onboarding Onboarding?
+	aiConfiguration AIConfiguration?
+	automationRules AutomationRuleRecord[]
 	employees  Employee[]
+	orders     Order[]
+	tickets    Ticket[]
+	reports    Report[]
 	activities Activity[]
 	createdAt  DateTime   @default(now())
 	updatedAt  DateTime   @updatedAt
@@ -130,10 +136,15 @@ model Customer {
 	phone        String?
 	status       String         @default("LEAD")
 	satisfaction Int            @default(100)
+	preferences  Json?
+	notes        String?
+	tags         String[]       @default([])
 	lastContact  DateTime       @default(now())
 	emails       Email[]
 	tasks        Task[]
 	quotes       Quote[]
+	orders       Order[]
+	tickets      Ticket[]
 	createdAt    DateTime       @default(now())
 	updatedAt    DateTime       @updatedAt
 
@@ -194,11 +205,19 @@ model Quote {
 	customer   Customer    @relation(fields: [customerId], references: [id])
 	items      QuoteItem[]
 	subtotal   Float
+	discountPercent Float       @default(0)
 	taxRate    Float       @default(22)
 	taxAmount  Float
 	total      Float
 	notes      String?
 	validUntil DateTime?
+	followUpAt DateTime?
+	revision   Int         @default(1)
+	parentQuoteId String?
+	parentQuote Quote?     @relation("QuoteRevisions", fields: [parentQuoteId], references: [id])
+	revisions   Quote[]    @relation("QuoteRevisions")
+	approvedAt DateTime?
+	order      Order?
 	pdfData    Bytes?
 	pdfFilename String?
 	sentAt     DateTime?
@@ -215,6 +234,7 @@ model QuoteItem {
 	description String
 	quantity    Float
 	unitPrice   Float
+	discountPercent Float @default(0)
 	total       Float
 }
 
@@ -226,8 +246,10 @@ model Employee {
 	email        String
 	role         String
 	department   String
+	status       String       @default("ACTIVE")
 	attendances  Attendance[]
 	createdAt    DateTime     @default(now())
+	updatedAt    DateTime     @updatedAt
 
 	@@unique([companyId, email])
 }
@@ -238,7 +260,11 @@ model Attendance {
 	employee   Employee @relation(fields: [employeeId], references: [id])
 	date       DateTime
 	hours      Float
+	checkIn    DateTime?
+	checkOut   DateTime?
+	status     String   @default("RECORDED")
 	note       String?
+	createdAt  DateTime @default(now())
 
 	@@unique([employeeId, date])
 }
@@ -251,4 +277,89 @@ model Activity {
 	title     String
 	detail    String
 	createdAt DateTime @default(now())
+}
+
+model Onboarding {
+	id          String   @id @default(cuid())
+	companyId   String   @unique
+	company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	currentStep Int      @default(1)
+	completed   Boolean  @default(false)
+	modules     Json
+	createdAt   DateTime @default(now())
+	updatedAt   DateTime @updatedAt
+}
+
+model AIConfiguration {
+	id                  String   @id @default(cuid())
+	companyId           String   @unique
+	company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	tone                 String   @default("professionale")
+	language             String   @default("it")
+	signature            String?
+	instructions         String?
+	autoReplyEnabled     Boolean  @default(false)
+	confidenceThreshold Float    @default(0.85)
+	createdAt            DateTime @default(now())
+	updatedAt            DateTime @updatedAt
+}
+
+model AutomationRuleRecord {
+	id        String   @id @default(cuid())
+	companyId String
+	company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	name      String
+	trigger   String
+	actions   String[]
+	enabled   Boolean  @default(true)
+	createdAt DateTime @default(now())
+	updatedAt DateTime @updatedAt
+
+	@@index([companyId, trigger, enabled])
+}
+
+model Order {
+	id         String   @id @default(cuid())
+	companyId  String
+	company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	customerId String
+	customer   Customer @relation(fields: [customerId], references: [id])
+	quoteId    String   @unique
+	quote      Quote    @relation(fields: [quoteId], references: [id])
+	number     String
+	status     String   @default("CONFIRMED")
+	total      Float
+	createdAt  DateTime @default(now())
+	updatedAt  DateTime @updatedAt
+
+	@@unique([companyId, number])
+}
+
+model Ticket {
+	id         String    @id @default(cuid())
+	companyId  String
+	company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	customerId String?
+	customer   Customer? @relation(fields: [customerId], references: [id])
+	title      String
+	description String?
+	priority   String    @default("MEDIUM")
+	status     String    @default("OPEN")
+	createdAt  DateTime  @default(now())
+	updatedAt  DateTime  @updatedAt
+
+	@@index([companyId, status])
+}
+
+model Report {
+	id         String   @id @default(cuid())
+	companyId  String
+	company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+	type       String
+	periodStart DateTime
+	periodEnd  DateTime
+	data       Json
+	createdAt  DateTime @default(now())
+
+	@@index([companyId, type, createdAt])
 }

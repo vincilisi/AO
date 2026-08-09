@@ -7,7 +7,7 @@ export interface Quote {
   createdAt: string;
 }
 
-export type PlanCode = "PRIVATE" | "SMALL_BUSINESS" | "ENTERPRISE";
+export type PlanCode = "BASE" | "PRO" | "BUSINESS" | "ENTERPRISE";
 
 export interface SaaSPlan {
   code: PlanCode;
@@ -28,9 +28,9 @@ export interface SaaSPlan {
 
 export const SAAS_PLANS: readonly SaaSPlan[] = [
   {
-    code: "PRIVATE",
-    audience: "Privato e professionista",
-    name: "Essenziale",
+    code: "BASE",
+    audience: "Professionista",
+    name: "Base",
     description: "Per chi vuole delegare email, clienti e preventivi senza una struttura complessa.",
     monthlyPriceCents: 4900,
     setupPriceCents: 19000,
@@ -40,14 +40,26 @@ export const SAAS_PLANS: readonly SaaSPlan[] = [
     features: ["1 casella email", "Archivio ricevute e inviate", "CRM clienti", "Listino e preventivi PDF", "Installazione e configurazione iniziale"]
   },
   {
-    code: "SMALL_BUSINESS",
+    code: "PRO",
+    audience: "Studio e microimpresa",
+    name: "Pro",
+    description: "Per piccoli team che automatizzano email, preventivi e relazione con i clienti.",
+    monthlyPriceCents: 9900,
+    setupPriceCents: 49000,
+    capacity: "Fino a 20 ore operative recuperabili al mese",
+    highlighted: true,
+    limits: { mailboxes: 3, users: 5, monthlyEmails: 1200 },
+    features: ["3 caselle email", "5 utenti", "Risposte automatiche", "CRM e storico cliente", "Preventivi e follow-up", "Onboarding guidato"]
+  },
+  {
+    code: "BUSINESS",
     audience: "Piccola azienda",
     name: "Business",
     description: "Per uffici che vogliono automatizzare il lavoro commerciale e amministrativo quotidiano.",
     monthlyPriceCents: 19900,
     setupPriceCents: 99000,
     capacity: "Fino a 40 ore operative recuperabili al mese",
-    highlighted: true,
+    highlighted: false,
     limits: { mailboxes: 5, users: 10, monthlyEmails: 3000 },
     features: ["Fino a 5 caselle email", "10 utenti", "Risposte automatiche", "CRM, listino e preventivi", "Attività e personale", "Installazione, importazione e formazione"]
   },

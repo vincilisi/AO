@@ -5,13 +5,13 @@ import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { Prisma, database } from "@ai-office/database";
 import { analyzeEmail } from "@ai-office/ai-core";
-import { AutomationEngine } from "@ai-office/automations";
 import { findSaaSPlan, SAAS_PLANS } from "@ai-office/billing";
 import { authenticate, createSession, hashPassword, tokenHash, verifyPassword } from "./auth.js";
 import { generateQuotePdf, sendQuoteEmail } from "./quote-service.js";
 import { decryptMailboxPassword, encryptMailboxPassword, sendMailboxEmail, verifyMailbox } from "./mailbox-service.js";
 import { createPayPalSubscription, getPayPalSubscription, paypalApprovalUrl, verifyPayPalWebhook, type PayPalWebhookEvent } from "./paypal-service.js";
 import { automateQuoteRequest } from "./email-quote-automation.js";
+import { apiDocsHtml, openApiDocument } from "./openapi.js";
 
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
@@ -23,7 +23,6 @@ interface LiveSocket {
   companyId?: string;
 }
 
-const automations = new AutomationEngine();
 const sockets = new Set<LiveSocket>();
 
 function publish(companyId: string, type: string, payload: unknown) {
@@ -97,6 +96,34 @@ async function syncPayPalSubscription(paypalSubscriptionId: string, expectedComp
   return remote;
 }
 
+const defaultModules = { crm: true, email: true, quotes: true, hr: false, automations: true };
+
+async function ensureCommercialSetup(companyId: string) {
+  const [onboarding, aiConfiguration] = await database.$transaction([
+    database.onboarding.upsert({ where: { companyId }, create: { companyId, modules: defaultModules }, update: {} }),
+    database.aIConfiguration.upsert({ where: { companyId }, create: { companyId }, update: {} })
+  ]);
+  const ruleCount = await database.automationRuleRecord.count({ where: { companyId } });
+  if (!ruleCount) await database.automationRuleRecord.createMany({ data: [
+    { companyId, name: "Email in attività", trigger: "email.received", actions: ["create-task", "draft-reply"] },
+    { companyId, name: "Preventivo in ordine", trigger: "quote.approved", actions: ["create-order", "notify"] },
+    { companyId, name: "Cliente in ticket", trigger: "customer.support", actions: ["create-ticket", "notify"] },
+    { companyId, name: "Presenze in report", trigger: "attendance.weekly", actions: ["create-report", "notify"] }
+  ] });
+  return { onboarding, aiConfiguration };
+}
+
+async function planForCompany(companyId: string) {
+  const subscription = await database.subscription.findUnique({ where: { companyId } });
+  return findSaaSPlan(subscription?.planCode ?? "BASE") ?? findSaaSPlan("BASE")!;
+}
+
+async function automationExecutions(companyId: string, trigger: string) {
+  await ensureCommercialSetup(companyId);
+  const rules = await database.automationRuleRecord.findMany({ where: { companyId, trigger, enabled: true } });
+  return rules.flatMap((rule) => rule.actions.map((action) => ({ ruleId: rule.id, action })));
+}
+
 function publicMailbox(mailbox: { id: string; email: string; displayName: string | null; username: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; isPrimary: boolean; autoReply: boolean; enabled: boolean }) {
   return mailbox;
 }
@@ -125,6 +152,9 @@ async function buildServer() {
     await database.$queryRaw`SELECT 1`;
     return { status: "ok", service: "ai-office-api", database: "postgresql", timestamp: new Date().toISOString() };
   });
+
+  app.get("/api/openapi.json", async () => openApiDocument);
+  app.get("/api/docs", async (_request, reply) => reply.type("text/html; charset=utf-8").send(apiDocsHtml));
 
   app.post<{ Body: PayPalWebhookEvent }>("/api/paypal/webhook", async (request, reply) => {
     if (!await verifyPayPalWebhook(request.headers, request.body)) throw Object.assign(new Error("Firma PayPal non valida"), { statusCode: 400 });
@@ -155,6 +185,14 @@ async function buildServer() {
         postalCode: typeof request.body.postalCode === "string" ? request.body.postalCode.trim() || null : null
       } });
       const user = await transaction.user.create({ data: { companyId: company.id, name, email, passwordHash } });
+      await transaction.onboarding.create({ data: { companyId: company.id, modules: defaultModules } });
+      await transaction.aIConfiguration.create({ data: { companyId: company.id } });
+      await transaction.automationRuleRecord.createMany({ data: [
+        { companyId: company.id, name: "Email in attività", trigger: "email.received", actions: ["create-task", "draft-reply"] },
+        { companyId: company.id, name: "Preventivo in ordine", trigger: "quote.approved", actions: ["create-order", "notify"] },
+        { companyId: company.id, name: "Cliente in ticket", trigger: "customer.support", actions: ["create-ticket", "notify"] },
+        { companyId: company.id, name: "Presenze in report", trigger: "attendance.weekly", actions: ["create-report", "notify"] }
+      ] });
       return { company, user };
     });
     const token = await createSession(result.user.id, result.company.id);
@@ -231,6 +269,55 @@ async function buildServer() {
     return { url: process.env.PAYPAL_ENVIRONMENT === "live" ? "https://www.paypal.com/myaccount/autopay/" : "https://www.sandbox.paypal.com/myaccount/autopay/" };
   });
 
+  app.get("/api/onboarding", async (request) => {
+    const auth = await authenticate(request);
+    const [{ onboarding, aiConfiguration }, mailboxCount, plan] = await Promise.all([
+      ensureCommercialSetup(auth.companyId),
+      database.mailbox.count({ where: { companyId: auth.companyId, enabled: true } }),
+      planForCompany(auth.companyId)
+    ]);
+    return { onboarding, aiConfiguration, mailboxConnected: mailboxCount > 0, plan, steps: [
+      { id: "company", label: "Profilo azienda", completed: true },
+      { id: "mailbox", label: "Collega email", completed: mailboxCount > 0 },
+      { id: "ai", label: "Configura AI", completed: onboarding.currentStep >= 3 },
+      { id: "modules", label: "Attiva moduli", completed: onboarding.completed }
+    ] };
+  });
+
+  app.patch<{ Body: Record<string, unknown> }>("/api/onboarding", async (request) => {
+    const auth = await authenticate(request);
+    await ensureCommercialSetup(auth.companyId);
+    const threshold = Number(request.body.confidenceThreshold ?? 0.85);
+    if (!Number.isFinite(threshold) || threshold < 0.5 || threshold > 1) throw Object.assign(new Error("Soglia AI non valida"), { statusCode: 400 });
+    const modules = request.body.modules && typeof request.body.modules === "object" ? request.body.modules as Prisma.InputJsonValue : undefined;
+    const [onboarding, aiConfiguration] = await database.$transaction([
+      database.onboarding.update({ where: { companyId: auth.companyId }, data: { currentStep: 3, modules } }),
+      database.aIConfiguration.update({ where: { companyId: auth.companyId }, data: {
+        tone: typeof request.body.tone === "string" ? request.body.tone : undefined,
+        language: typeof request.body.language === "string" ? request.body.language : undefined,
+        signature: typeof request.body.signature === "string" ? request.body.signature.trim() || null : undefined,
+        instructions: typeof request.body.instructions === "string" ? request.body.instructions.trim() || null : undefined,
+        autoReplyEnabled: typeof request.body.autoReplyEnabled === "boolean" ? request.body.autoReplyEnabled : undefined,
+        confidenceThreshold: threshold
+      } })
+    ]);
+    return { onboarding, aiConfiguration };
+  });
+
+  app.post("/api/onboarding/complete", async (request) => {
+    const auth = await authenticate(request);
+    const { aiConfiguration } = await ensureCommercialSetup(auth.companyId);
+    const mailboxCount = await database.mailbox.count({ where: { companyId: auth.companyId, enabled: true } });
+    if (!mailboxCount) throw Object.assign(new Error("Collega e verifica almeno una casella email"), { statusCode: 409 });
+    const onboarding = await database.$transaction(async (transaction) => {
+      await transaction.mailbox.updateMany({ where: { companyId: auth.companyId }, data: { autoReply: aiConfiguration.autoReplyEnabled } });
+      await transaction.activity.create({ data: { companyId: auth.companyId, type: "onboarding", title: "Onboarding completato", detail: "Email, AI e moduli sono operativi" } });
+      return transaction.onboarding.update({ where: { companyId: auth.companyId }, data: { currentStep: 4, completed: true } });
+    });
+    publish(auth.companyId, "onboarding.completed", onboarding);
+    return onboarding;
+  });
+
   app.get("/api/mailboxes", async (request) => {
     const auth = await authenticate(request);
     return (await database.mailbox.findMany({ where: { companyId: auth.companyId }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] })).map(publicMailbox);
@@ -238,6 +325,9 @@ async function buildServer() {
 
   app.post<{ Body: Record<string, unknown> }>("/api/mailboxes", async (request, reply) => {
     const auth = await authenticate(request);
+    const plan = await planForCompany(auth.companyId);
+    const mailboxCount = await database.mailbox.count({ where: { companyId: auth.companyId } });
+    if (mailboxCount >= plan.limits.mailboxes) throw Object.assign(new Error(`Il piano ${plan.name} consente ${plan.limits.mailboxes} caselle email`), { statusCode: 403 });
     const email = emailValue(request.body.email, "email");
     const password = stringValue(request.body.password, "password");
     const existingCount = await database.mailbox.count({ where: { companyId: auth.companyId } });
@@ -259,6 +349,8 @@ async function buildServer() {
       return transaction.mailbox.create({ data: { companyId: auth.companyId, ...input, isPrimary, autoReply: request.body.autoReply === true } });
     });
     await database.company.update({ where: { id: auth.companyId }, data: { email: mailbox.isPrimary ? mailbox.email : undefined } });
+    await ensureCommercialSetup(auth.companyId);
+    await database.onboarding.update({ where: { companyId: auth.companyId }, data: { currentStep: 2 } });
     publish(auth.companyId, "mailbox.created", { id: mailbox.id });
     return reply.status(201).send(publicMailbox(mailbox));
   });
@@ -357,6 +449,65 @@ async function buildServer() {
     return reply.status(201).send(publicCustomer(customer));
   });
 
+  app.get<{ Params: { id: string } }>("/api/customers/:id", async (request) => {
+    const auth = await authenticate(request);
+    const customer = await database.customer.findFirst({ where: { id: request.params.id, companyId: auth.companyId }, include: {
+      emails: { orderBy: { receivedAt: "desc" }, take: 50 },
+      tasks: { orderBy: { createdAt: "desc" }, take: 50 },
+      quotes: { orderBy: { createdAt: "desc" }, take: 50 },
+      orders: { orderBy: { createdAt: "desc" }, take: 50 },
+      tickets: { orderBy: { createdAt: "desc" }, take: 50 }
+    } });
+    if (!customer) throw Object.assign(new Error("Cliente non trovato"), { statusCode: 404 });
+    const timeline = [
+      ...customer.emails.map((item) => ({ id: item.id, type: "email", title: item.subject, detail: item.direction, at: item.receivedAt })),
+      ...customer.tasks.map((item) => ({ id: item.id, type: "task", title: item.title, detail: item.status, at: item.createdAt })),
+      ...customer.quotes.map((item) => ({ id: item.id, type: "quote", title: `${item.number} · ${item.title}`, detail: item.status, at: item.createdAt })),
+      ...customer.orders.map((item) => ({ id: item.id, type: "order", title: item.number, detail: item.status, at: item.createdAt })),
+      ...customer.tickets.map((item) => ({ id: item.id, type: "ticket", title: item.title, detail: item.status, at: item.createdAt }))
+    ].sort((left, right) => right.at.getTime() - left.at.getTime());
+    return { ...publicCustomer(customer), preferences: customer.preferences, notes: customer.notes, tags: customer.tags, timeline };
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/customers/:id", async (request) => {
+    const auth = await authenticate(request);
+    const customer = await database.customer.findFirst({ where: { id: request.params.id, companyId: auth.companyId } });
+    if (!customer) throw Object.assign(new Error("Cliente non trovato"), { statusCode: 404 });
+    const preferences = request.body.preferences && typeof request.body.preferences === "object" ? request.body.preferences as Prisma.InputJsonValue : undefined;
+    const updated = await database.customer.update({ where: { id: customer.id }, data: {
+      name: typeof request.body.name === "string" && request.body.name.trim() ? request.body.name.trim() : undefined,
+      companyName: typeof request.body.companyName === "string" && request.body.companyName.trim() ? request.body.companyName.trim() : undefined,
+      phone: typeof request.body.phone === "string" ? request.body.phone.trim() || null : undefined,
+      status: typeof request.body.status === "string" ? request.body.status : undefined,
+      satisfaction: Number.isInteger(Number(request.body.satisfaction)) ? Number(request.body.satisfaction) : undefined,
+      notes: typeof request.body.notes === "string" ? request.body.notes.trim() || null : undefined,
+      tags: Array.isArray(request.body.tags) ? request.body.tags.filter((tag): tag is string => typeof tag === "string" && Boolean(tag.trim())).map((tag) => tag.trim()) : undefined,
+      preferences
+    } });
+    publish(auth.companyId, "customer.updated", { id: updated.id });
+    return publicCustomer(updated);
+  });
+
+  app.get("/api/tickets", async (request) => {
+    const auth = await authenticate(request);
+    return database.ticket.findMany({ where: { companyId: auth.companyId }, include: { customer: { select: { name: true, companyName: true } } }, orderBy: { createdAt: "desc" } });
+  });
+
+  app.post<{ Body: Record<string, unknown> }>("/api/tickets", async (request, reply) => {
+    const auth = await authenticate(request);
+    const customerId = typeof request.body.customerId === "string" ? request.body.customerId : null;
+    if (customerId && !await database.customer.findFirst({ where: { id: customerId, companyId: auth.companyId } })) throw Object.assign(new Error("Cliente non trovato"), { statusCode: 404 });
+    const ticket = await database.ticket.create({ data: { companyId: auth.companyId, customerId, title: stringValue(request.body.title, "title"), description: typeof request.body.description === "string" ? request.body.description : null, priority: typeof request.body.priority === "string" ? request.body.priority : "MEDIUM" } });
+    await database.activity.create({ data: { companyId: auth.companyId, type: "ticket", title: "Ticket creato", detail: ticket.title } });
+    publish(auth.companyId, "ticket.created", ticket);
+    return reply.status(201).send(ticket);
+  });
+
+  app.get("/api/orders", async (request) => {
+    const auth = await authenticate(request);
+    return database.order.findMany({ where: { companyId: auth.companyId }, include: { customer: true, quote: { select: { number: true, title: true } } }, orderBy: { createdAt: "desc" } });
+  });
+
   app.get("/api/products", async (request) => {
     const auth = await authenticate(request);
     return database.product.findMany({ where: { companyId: auth.companyId }, orderBy: [{ active: "desc" }, { name: "asc" }] });
@@ -428,17 +579,20 @@ async function buildServer() {
       const product = typeof value.productId === "string" ? productById.get(value.productId) : undefined;
       if (value.productId && !product) throw Object.assign(new Error(`Voce ${index + 1}: prodotto non disponibile`), { statusCode: 400 });
       const unitPrice = product?.unitPrice ?? Number(value.unitPrice);
-      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) throw Object.assign(new Error(`Voce ${index + 1} non valida`), { statusCode: 400 });
-      return { description: product ? `${product.name}${product.description ? ` - ${product.description}` : ""}` : stringValue(value.description, `items.${index}.description`), quantity, unitPrice, total: Math.round(quantity * unitPrice * 100) / 100 };
+      const discountPercent = Number(value.discountPercent ?? 0);
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) throw Object.assign(new Error(`Voce ${index + 1} non valida`), { statusCode: 400 });
+      return { description: product ? `${product.name}${product.description ? ` - ${product.description}` : ""}` : stringValue(value.description, `items.${index}.description`), quantity, unitPrice, discountPercent, total: Math.round(quantity * unitPrice * (1 - discountPercent / 100) * 100) / 100 };
     });
-    const subtotal = Math.round(items.reduce((sum, item) => sum + item.total, 0) * 100) / 100;
+    const discountPercent = Number(request.body.discountPercent ?? 0);
+    if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) throw Object.assign(new Error("Sconto preventivo non valido"), { statusCode: 400 });
+    const subtotal = Math.round(items.reduce((sum, item) => sum + item.total, 0) * (1 - discountPercent / 100) * 100) / 100;
     const selectedTaxRates = products.map((product) => product.taxRate);
     const taxRate = selectedTaxRates.length && selectedTaxRates.every((rate) => rate === selectedTaxRates[0]) ? selectedTaxRates[0] : Number.isFinite(Number(request.body.taxRate)) ? Number(request.body.taxRate) : 22;
     const taxAmount = Math.round(subtotal * taxRate) / 100;
     const total = Math.round((subtotal + taxAmount) * 100) / 100;
     const sequence = await database.quote.count({ where: { companyId: auth.companyId, createdAt: { gte: new Date(new Date().getFullYear(), 0, 1) } } });
     const number = `${new Date().getFullYear()}-${String(sequence + 1).padStart(4, "0")}`;
-    const quote = await database.quote.create({ data: { companyId: auth.companyId, customerId, number, title: stringValue(request.body.title, "title"), subtotal, taxRate, taxAmount, total, notes: typeof request.body.notes === "string" ? request.body.notes : null, validUntil: typeof request.body.validUntil === "string" && request.body.validUntil ? new Date(request.body.validUntil) : null, items: { create: items } }, include: { company: true, customer: true, items: true } });
+    const quote = await database.quote.create({ data: { companyId: auth.companyId, customerId, number, title: stringValue(request.body.title, "title"), subtotal, discountPercent, taxRate, taxAmount, total, notes: typeof request.body.notes === "string" ? request.body.notes : null, validUntil: typeof request.body.validUntil === "string" && request.body.validUntil ? new Date(request.body.validUntil) : null, followUpAt: typeof request.body.followUpAt === "string" && request.body.followUpAt ? new Date(request.body.followUpAt) : null, items: { create: items } }, include: { company: true, customer: true, items: true } });
     const pdf = await generateQuotePdf(quote);
     const saved = await database.quote.update({ where: { id: quote.id }, data: { pdfData: prismaBytes(pdf), pdfFilename: `preventivo-${number}.pdf` }, include: { customer: true } });
     await database.activity.create({ data: { companyId: auth.companyId, type: "quote", title: "Preventivo creato", detail: `${number} · ${customer.companyName}` } });
@@ -470,10 +624,111 @@ async function buildServer() {
     return publicQuote(sent);
   });
 
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/quotes/:id", async (request) => {
+    const auth = await authenticate(request);
+    const quote = await database.quote.findFirst({ where: { id: request.params.id, companyId: auth.companyId } });
+    if (!quote) throw Object.assign(new Error("Preventivo non trovato"), { statusCode: 404 });
+    return database.quote.update({ where: { id: quote.id }, data: {
+      notes: typeof request.body.notes === "string" ? request.body.notes : undefined,
+      validUntil: typeof request.body.validUntil === "string" ? new Date(request.body.validUntil) : undefined,
+      followUpAt: typeof request.body.followUpAt === "string" ? new Date(request.body.followUpAt) : undefined
+    } });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/quotes/:id/revise", async (request, reply) => {
+    const auth = await authenticate(request);
+    const original = await quoteWithRelations(auth.companyId, request.params.id);
+    const revision = original.revision + 1;
+    const number = `${original.number.split("-R")[0]}-R${revision}`;
+    const quote = await database.quote.create({ data: {
+      companyId: auth.companyId,
+      customerId: original.customerId,
+      parentQuoteId: original.id,
+      number,
+      title: original.title,
+      status: "bozza",
+      subtotal: original.subtotal,
+      discountPercent: original.discountPercent,
+      taxRate: original.taxRate,
+      taxAmount: original.taxAmount,
+      total: original.total,
+      notes: original.notes,
+      validUntil: original.validUntil,
+      followUpAt: original.followUpAt,
+      revision,
+      items: { create: original.items.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, discountPercent: item.discountPercent, total: item.total })) }
+    }, include: { company: true, customer: true, items: true } });
+    const pdf = await generateQuotePdf(quote);
+    const saved = await database.quote.update({ where: { id: quote.id }, data: { pdfData: prismaBytes(pdf), pdfFilename: `preventivo-${number}.pdf` }, include: { customer: true } });
+    await database.activity.create({ data: { companyId: auth.companyId, type: "quote", title: "Revisione preventivo creata", detail: number } });
+    publish(auth.companyId, "quote.revised", saved);
+    return reply.status(201).send(publicQuote(saved));
+  });
+
+  app.post<{ Params: { id: string } }>("/api/quotes/:id/approve", async (request) => {
+    const auth = await authenticate(request);
+    const quote = await database.quote.findFirst({ where: { id: request.params.id, companyId: auth.companyId }, include: { customer: true, order: true } });
+    if (!quote) throw Object.assign(new Error("Preventivo non trovato"), { statusCode: 404 });
+    if (quote.order) return { quote: publicQuote(quote), order: quote.order };
+    const sequence = await database.order.count({ where: { companyId: auth.companyId, createdAt: { gte: new Date(new Date().getFullYear(), 0, 1) } } });
+    const orderNumber = `ORD-${new Date().getFullYear()}-${String(sequence + 1).padStart(4, "0")}`;
+    const result = await database.$transaction(async (transaction) => {
+      const approved = await transaction.quote.update({ where: { id: quote.id }, data: { status: "approvato", approvedAt: new Date() }, include: { customer: true } });
+      const order = await transaction.order.create({ data: { companyId: auth.companyId, customerId: quote.customerId, quoteId: quote.id, number: orderNumber, total: quote.total } });
+      await transaction.activity.create({ data: { companyId: auth.companyId, type: "order", title: "Preventivo convertito in ordine", detail: `${quote.number} → ${orderNumber}` } });
+      return { quote: publicQuote(approved), order };
+    });
+    publish(auth.companyId, "quote.approved", result);
+    return result;
+  });
+
   app.get("/api/employees", async (request) => {
     const auth = await authenticate(request);
-    const employees = await database.employee.findMany({ where: { companyId: auth.companyId }, include: { attendances: true }, orderBy: { createdAt: "desc" } });
-    return employees.map((employee) => ({ ...employee, status: "presente", weeklyHours: employee.attendances.reduce((sum, item) => sum + item.hours, 0), attendances: undefined }));
+    const weekStart = new Date();
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const employees = await database.employee.findMany({ where: { companyId: auth.companyId }, include: { attendances: { where: { date: { gte: weekStart } }, orderBy: { date: "desc" } } }, orderBy: { createdAt: "desc" } });
+    return employees.map((employee) => ({ ...employee, weeklyHours: employee.attendances.reduce((sum, item) => sum + item.hours, 0) }));
+  });
+
+  app.post<{ Body: Record<string, unknown> }>("/api/employees", async (request, reply) => {
+    const auth = await authenticate(request);
+    const employee = await database.employee.create({ data: { companyId: auth.companyId, name: stringValue(request.body.name, "name"), email: emailValue(request.body.email, "email"), role: stringValue(request.body.role, "role"), department: stringValue(request.body.department, "department") } });
+    publish(auth.companyId, "employee.created", employee);
+    return reply.status(201).send(employee);
+  });
+
+  app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/employees/:id/attendance", async (request, reply) => {
+    const auth = await authenticate(request);
+    const employee = await database.employee.findFirst({ where: { id: request.params.id, companyId: auth.companyId } });
+    if (!employee) throw Object.assign(new Error("Dipendente non trovato"), { statusCode: 404 });
+    const date = typeof request.body.date === "string" ? new Date(request.body.date) : new Date();
+    const checkIn = typeof request.body.checkIn === "string" ? new Date(request.body.checkIn) : null;
+    const checkOut = typeof request.body.checkOut === "string" ? new Date(request.body.checkOut) : null;
+    const calculatedHours = checkIn && checkOut ? (checkOut.getTime() - checkIn.getTime()) / 3600000 : Number(request.body.hours);
+    if (!Number.isFinite(calculatedHours) || calculatedHours < 0 || calculatedHours > 24) throw Object.assign(new Error("Ore di presenza non valide"), { statusCode: 400 });
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const attendance = await database.attendance.upsert({ where: { employeeId_date: { employeeId: employee.id, date: day } }, create: { employeeId: employee.id, date: day, hours: Math.round(calculatedHours * 100) / 100, checkIn, checkOut, note: typeof request.body.note === "string" ? request.body.note : null }, update: { hours: Math.round(calculatedHours * 100) / 100, checkIn, checkOut, note: typeof request.body.note === "string" ? request.body.note : undefined } });
+    publish(auth.companyId, "attendance.recorded", { employeeId: employee.id, attendanceId: attendance.id });
+    return reply.status(201).send(attendance);
+  });
+
+  app.get("/api/hr/reports", async (request) => {
+    const auth = await authenticate(request);
+    return database.report.findMany({ where: { companyId: auth.companyId, type: "ATTENDANCE_WEEKLY" }, orderBy: { createdAt: "desc" }, take: 24 });
+  });
+
+  app.post("/api/hr/reports/weekly", async (request, reply) => {
+    const auth = await authenticate(request);
+    const periodEnd = new Date();
+    const periodStart = new Date(periodEnd);
+    periodStart.setDate(periodStart.getDate() - 7);
+    const employees = await database.employee.findMany({ where: { companyId: auth.companyId }, include: { attendances: { where: { date: { gte: periodStart, lte: periodEnd } } } } });
+    const rows = employees.map((employee) => ({ employeeId: employee.id, name: employee.name, hours: employee.attendances.reduce((sum, item) => sum + item.hours, 0), days: employee.attendances.length }));
+    const report = await database.report.create({ data: { companyId: auth.companyId, type: "ATTENDANCE_WEEKLY", periodStart, periodEnd, data: { rows, totalHours: rows.reduce((sum, row) => sum + row.hours, 0) } } });
+    await database.activity.create({ data: { companyId: auth.companyId, type: "report", title: "Report presenze generato", detail: `${rows.length} dipendenti · ${rows.reduce((sum, row) => sum + row.hours, 0)} ore` } });
+    publish(auth.companyId, "report.created", report);
+    return reply.status(201).send(report);
   });
 
   app.post<{ Body: { subject?: string; text?: string } }>("/api/ai/analyze-email", async (request) => {
@@ -483,7 +738,20 @@ async function buildServer() {
     return decision;
   });
 
-  app.get("/api/automations", async (request) => { await authenticate(request); return automations.list(); });
+  app.get("/api/automations", async (request) => {
+    const auth = await authenticate(request);
+    await ensureCommercialSetup(auth.companyId);
+    return database.automationRuleRecord.findMany({ where: { companyId: auth.companyId }, orderBy: { createdAt: "asc" } });
+  });
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/automations/:id", async (request) => {
+    const auth = await authenticate(request);
+    const rule = await database.automationRuleRecord.findFirst({ where: { id: request.params.id, companyId: auth.companyId } });
+    if (!rule) throw Object.assign(new Error("Automazione non trovata"), { statusCode: 404 });
+    const updated = await database.automationRuleRecord.update({ where: { id: rule.id }, data: { enabled: typeof request.body.enabled === "boolean" ? request.body.enabled : undefined, name: typeof request.body.name === "string" && request.body.name.trim() ? request.body.name.trim() : undefined } });
+    publish(auth.companyId, "automation.updated", updated);
+    return updated;
+  });
 
   app.post<{ Body: Record<string, unknown> }>("/api/emails/process", async (request, reply) => {
     const subject = stringValue(request.body.subject, "subject");
@@ -496,7 +764,7 @@ async function buildServer() {
     const existingEmail = await database.email.findUnique({ where: { companyId_messageId: { companyId, messageId } } });
     if (existingEmail) return reply.send({ duplicate: true, emailId: existingEmail.id });
     const decision = analyzeEmail(subject, text);
-    const executions = automations.execute("email.received");
+    const executions = await automationExecutions(companyId, "email.received");
     const email = await database.email.create({ data: { companyId, mailboxId: mailbox?.id, messageId, from, to: recipient ?? "", subject, text, category: decision.category, priority: decision.priority, direction: "INBOUND", status: "RECEIVED" } });
     const task = await database.task.create({ data: { companyId, title: subject, description: text, owner: decision.department, status: "da-fare", priority: decision.priority, dueAt: new Date(Date.now() + (decision.priority === "urgente" ? 3600000 : 86400000)) } });
     const activity = await database.activity.create({ data: { companyId, type: "email", title: "Email elaborata", detail: `${from} · ${decision.category} · ${decision.department}` } });
