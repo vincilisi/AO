@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ai-office-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_office_manager
+      POSTGRES_USER: office
+      POSTGRES_PASSWORD: office
+    ports:
+      - "5432:5432"
+    volumes:
+      - ai_office_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U office -d ai_office_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ai_office_data:
