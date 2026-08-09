@@ -18,6 +18,7 @@
     "db:push": "npm run push -w @ai-office/database"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "typescript": "5.9.3"
   }
 }
