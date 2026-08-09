@@ -6,8 +6,9 @@
       "framework": "nextjs"
     },
     "api": {
-      "root": "apps/api",
-      "entrypoint": "src/server.ts"
+      "root": ".",
+      "framework": "fastify",
+      "entrypoint": "apps/api/src/server.ts"
     }
   },
   "rewrites": [
