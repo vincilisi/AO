@@ -7,6 +7,7 @@
 - [x] **Dashboard Next.js** moderna e responsive
 - [x] **Sistema di login / registrazione** multi-tenant
 - [x] **Onboarding email automatico** con configurazione AI, moduli e connessione IMAP/SMTP guidata
+- [x] **PWA installabile** su desktop, Android e iOS con aggiornamenti automatici
 
 ## Avvio rapido
 
@@ -22,6 +23,10 @@ npm run dev
 Aprire `http://localhost:3000`. L'API risponde su `http://127.0.0.1:4000`.
 
 La documentazione REST interattiva è disponibile su `http://127.0.0.1:4000/api/docs`; la specifica OpenAPI JSON è esposta da `http://127.0.0.1:4000/api/openapi.json`.
+
+### Installazione come app
+
+In produzione, pubblicare la dashboard tramite HTTPS. Da Chrome o Edge usare **Installa app**; su iPhone e iPad usare **Condividi → Aggiungi alla schermata Home**. La PWA usa modalità standalone, icone dedicate e una cache dell'app shell che consente di aprire l'interfaccia anche senza rete; le operazioni sui dati richiedono comunque la connessione all'API.
 
 Per avviare il listener email in un terminale separato:
 
