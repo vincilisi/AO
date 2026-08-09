@@ -138,7 +138,7 @@ export async function createPayPalSubscription(input: {
   paypalPlanId: string | null;
 }) {
   const planId = input.paypalPlanId ?? (await createPlan(input.companyId, input.plan)).id;
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const appUrl = process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
   const subscription = await paypalRequest<PayPalSubscription>("/v1/billing/subscriptions", {
     method: "POST",
     body: JSON.stringify({

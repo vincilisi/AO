@@ -6,7 +6,7 @@ import {
   Inbox, LayoutDashboard, LockKeyhole, LogOut, Mail, Menu, Plus, RefreshCw, Search, Send, Settings, Sparkles, Users, X, Zap
 } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:4000");
 
 type View = "overview" | "plans" | "tasks" | "customers" | "products" | "quotes" | "team" | "email" | "ai";
 interface Task { id: string; title: string; owner: string; status: string; priority: string; dueAt: string }
@@ -162,7 +162,8 @@ export default function Dashboard() {
   useEffect(() => { if (token) void loadData(); }, [token]);
   useEffect(() => {
     if (!token) return;
-    const socket = new WebSocket(API_URL.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`);
+    const socketOrigin = API_URL ? API_URL.replace(/^http/, "ws") : window.location.origin.replace(/^http/, "ws");
+    const socket = new WebSocket(`${socketOrigin}/ws?token=${encodeURIComponent(token)}`);
     socket.onopen = () => setLive(true);
     socket.onclose = () => setLive(false);
     socket.onmessage = (event) => {
