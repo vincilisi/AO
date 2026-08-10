@@ -1,4 +1,5 @@
-import { database } from "@ai-office/database";
+import { database } from "../database";
+
 
 export const updateCrm = async (email: {
   from: string;
