@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-  "start": "npm run start -w @ai-office",
+  "start": "npm run start -w @ai-office/email-engine",
   "dev": "concurrently -n api,dashboard -c cyan,green \"npm run dev -w @ai-office/api\" \"npm run dev -w @ai-office/dashboard\"",
   "dev:api": "npm run dev -w @ai-office/api",
   "dev:dashboard": "npm run dev -w @ai-office/dashboard",

@@ -13,16 +13,20 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "imap": "0.8.17",
-    "imapflow": "^1.0.0",
-    "mailparser": "^3.9.15",
-    "nodemailer": "^9.0.5",
-    "ts-node": "^10.9.2"
-  },
+  "@prisma/client": "6.19.3",
+  "prisma": "6.19.3",
+  "dotenv": "^17.4.2",
+  "imap": "0.8.17",
+  "imapflow": "^1.0.0",
+  "mailparser": "^3.9.15",
+  "nodemailer": "^9.0.5",
+  "ts-node": "^10.9.2"
+}
+,
   "devDependencies": {
     "@types/node": "^26.2.0",
     "tsx": "^4.23.11",
     "typescript": "^7.0.2"
   }
+
 }
