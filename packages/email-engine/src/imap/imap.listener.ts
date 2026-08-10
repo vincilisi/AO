@@ -2,6 +2,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { decryptMailboxPassword } from "../mailbox/mailbox.service";
 import { logger } from "../utils/logger";
+import { prisma } from "../database/client";   // ✅ FIX: usa Prisma, non "database"
 
 const MAX_MESSAGES_PER_MAILBOX = 50;
 
@@ -25,10 +26,10 @@ async function registerEmail(mailbox, parsed) {
       to: mailbox.email,
       subject: parsed.subject?.trim() || "(Senza oggetto)",
       text: parsed.text?.trim() || "(Messaggio senza contenuto testuale)",
-      mailboxId: mailbox.id,               // 🔥 AGGIUNTO
-      direction: "INBOUND",                // 🔥 AGGIUNTO
-      status: "RECEIVED",                  // 🔥 AGGIUNTO
-      receivedAt: new Date()               // 🔥 AGGIUNTO
+      mailboxId: mailbox.id,
+      direction: "INBOUND",
+      status: "RECEIVED",
+      receivedAt: new Date()
     })
   });
 
@@ -58,7 +59,6 @@ async function pollMailbox(mailbox) {
 
     const lock = await client.getMailboxLock("INBOX");
     try {
-      // 🔥 VERSIONE CORRETTA: legge TUTTE le email
       const allMessages = await client.search({ all: true }, { uid: true });
 
       const uids = allMessages.slice(-MAX_MESSAGES_PER_MAILBOX);
@@ -91,7 +91,8 @@ async function pollMailbox(mailbox) {
 }
 
 export async function pollEnabledMailboxes() {
-  const mailboxes = await database.mailbox.findMany({
+  // ✅ FIX: usa Prisma
+  const mailboxes = await prisma.mailbox.findMany({
     where: { enabled: true }
   });
 
