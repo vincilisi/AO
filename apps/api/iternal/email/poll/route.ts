@@ -1,31 +1,26 @@
-import { NextResponse } from "next/server";
-import { pollEnabledMailboxes } from "@/lib/email/poll";
-import { prisma } from "@/lib/db";
+import { pollEnabledMailboxes } from "../../../../../packages/email-engine/src/imap/imap.listener";
+import { database } from "@ai-office/database";
 
-export async function GET() {
+export default async function handler(req, res) {
   try {
-    // 🔥 Test DB immediato (evita timeout GitHub)
-    await prisma.$queryRaw`SELECT 1`;
+    // 🔥 Controllo autorizzazione CRON
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ error: "Autorizzazione cron non valida" });
+    }
 
-    // 🔥 Avvia il polling in background (NON blocca la risposta)
+    // 🔥 Test DB immediato
+    await database.$queryRaw`SELECT 1`;
+
+    // 🔥 Avvia polling in background
     pollEnabledMailboxes()
-      .then(result => {
-        console.log("Polling completato:", result);
-      })
-      .catch(err => {
-        console.error("Errore nel polling:", err);
-      });
+      .then(result => console.log("Polling completato:", result))
+      .catch(err => console.error("Errore nel polling:", err));
 
-    // 🔥 Risposta immediata a GitHub Actions
-    return NextResponse.json({
-      ok: true,
-      message: "Polling avviato"
-    });
+    // 🔥 Risposta immediata
+    return res.json({ ok: true, message: "Polling avviato" });
 
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e.message },
-      { status: 500 }
-    );
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
