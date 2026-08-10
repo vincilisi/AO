@@ -5,7 +5,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx test.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "start": "tsx src/index.ts"
   },
   "keywords": [],
   "author": "",
