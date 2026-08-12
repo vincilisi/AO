@@ -2,8 +2,8 @@ name: Email Engine Worker
 
 on:
   schedule:
-    - cron: "*/1 * * * *"   # ogni minuto
-  workflow_dispatch:        # puoi avviarlo manualmente
+    - cron: "*/1 * * * *"
+  workflow_dispatch:
 
 jobs:
   run-email-engine:
@@ -26,13 +26,20 @@ jobs:
         working-directory: email-engine
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          APP_URL: ${{ secrets.APP_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          IMAP_HOST: ${{ secrets.IMAP_HOST }}
-          IMAP_PORT: ${{ secrets.IMAP_PORT }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+
+          PAYPAL_ENVIRONMENT: ${{ secrets.PAYPAL_ENVIRONMENT }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_IMAP_HOST: ${{ secrets.EMAIL_IMAP_HOST }}
+          EMAIL_IMAP_PORT: ${{ secrets.EMAIL_IMAP_PORT }}
+          EMAIL_SMTP_HOST: ${{ secrets.EMAIL_SMTP_HOST }}
+          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
+
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
         run: npm start
