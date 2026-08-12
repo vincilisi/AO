@@ -1,28 +1,38 @@
-name: Email polling
+name: Email Engine Worker
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: email-poll
-  cancel-in-progress: false
+    - cron: "*/1 * * * *"   # ogni minuto
+  workflow_dispatch:        # puoi avviarlo manualmente
 
 jobs:
-  poll:
+  run-email-engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+
     steps:
-      - name: Poll enabled mailboxes
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        working-directory: email-engine
+        run: npm install
+
+      - name: Run worker
+        working-directory: email-engine
         env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          test -n "$CRON_SECRET"
-          curl --fail-with-body --silent --show-error \
-            --max-time 210 \
-            --header "Authorization: Bearer $CRON_SECRET" \
-            https://ai-office-manager-psi.vercel.app/api/internal/email/poll
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_PORT: ${{ secrets.IMAP_PORT }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: npm start
