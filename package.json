@@ -7,23 +7,23 @@
     "packages/*"
   ],
   "scripts": {
-  "start": "npm run start -w @ai-office/email-engine",
-  "dev": "concurrently -n api,dashboard -c cyan,green \"npm run dev -w @ai-office/api\" \"npm run dev -w @ai-office/dashboard\"",
-  "dev:api": "npm run dev -w @ai-office/api",
-  "dev:dashboard": "npm run dev -w @ai-office/dashboard",
-  "dev:email": "npm run dev -w @ai-office/email-engine",
-  "build": "npm run build --workspaces --if-present",
-  "check": "npm run check --workspaces --if-present",
-  "db:generate": "npm run generate -w @ai-office/database",
-  "db:migrate": "npm run migrate -w @ai-office/database",
-  "db:push": "npm run push -w @ai-office/database"
-},
-
+    "start": "npm run start -w @ai-office/email-engine",
+    "dev": "concurrently -n api,dashboard -c cyan,green \"npm run dev -w @ai-office/api\" \"npm run dev -w @ai-office/dashboard\"",
+    "dev:api": "npm run dev -w @ai-office/api",
+    "dev:dashboard": "npm run dev -w @ai-office/dashboard",
+    "dev:email": "npm run dev -w @ai-office/email-engine",
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run check --workspaces --if-present",
+    "db:generate": "npm run generate -w @ai-office/database",
+    "db:migrate": "npm run migrate -w @ai-office/database",
+    "db:push": "npm run push -w @ai-office/database"
+  },
   "devDependencies": {
     "concurrently": "^9.2.1",
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "imapflow": "^1.6.6"
   }
 }
