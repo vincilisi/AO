@@ -1,10 +1,12 @@
 {
-  "name": "@ai-office/database",
+  "name": "email-engine",
   "version": "1.0.0",
-  "description": "",
-  "main": "src/index.ts",
+  "description": "Email polling worker for AO",
+  "main": "dist/index.js",
   "types": "src/index.ts",
   "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc",
     "generate": "dotenv -e ../../.env -- prisma generate",
     "migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "push": "dotenv -e ../../.env -- prisma db push",
@@ -16,10 +18,12 @@
   "type": "module",
   "dependencies": {
     "@prisma/client": "6.19.3",
-    "prisma": "6.19.3"
+    "prisma": "6.19.3",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "dotenv-cli": "^10.0.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "ts-node": "^10.9.2"
   }
 }
