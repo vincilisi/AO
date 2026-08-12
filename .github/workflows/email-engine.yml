@@ -20,11 +20,13 @@ jobs:
           node-version: 18
 
       - name: Install dependencies
-        working-directory: email-engine
+        working-directory: AO/email-engine
+
         run: npm install
 
       - name: Run worker
-        working-directory: email-engine
+        working-directory: AO/email-engine
+
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
