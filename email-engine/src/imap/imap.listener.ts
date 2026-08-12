@@ -2,7 +2,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { decryptMailboxPassword } from "../mailbox/mailbox.service";
 import { logger } from "../utils/logger";
-import { prisma } from "../database/client";   // ✅ FIX: usa Prisma, non "database"
+import { prisma } from "../database/client";
 
 const MAX_MESSAGES_PER_MAILBOX = 50;
 
@@ -43,13 +43,18 @@ async function registerEmail(mailbox, parsed) {
 async function pollMailbox(mailbox) {
   const client = new ImapFlow({
     host: mailbox.imapHost,
-    port: mailbox.imapPort,
-    secure: mailbox.imapPort === 993,
+    port: mailbox.imapPort ?? 993,       // fallback se manca nel DB
+    secure: true,                        // Gmail richiede SSL
     auth: {
       user: mailbox.username,
       pass: decryptMailboxPassword(mailbox.passwordEncrypted)
     },
-    logger: false
+    tls: {
+      rejectUnauthorized: false          // evita handshake failure su Render/GitHub
+    },
+    logger: false,
+    imapTimeout: 60000,                  // evita ETIMEOUT
+    socketTimeout: 60000
   });
 
   let imported = 0;
@@ -91,7 +96,6 @@ async function pollMailbox(mailbox) {
 }
 
 export async function pollEnabledMailboxes() {
-  // ✅ FIX: usa Prisma
   const mailboxes = await prisma.mailbox.findMany({
     where: { enabled: true }
   });
